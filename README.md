@@ -485,4 +485,4 @@ Paste the output as `JWT_SECRET` in your `.env`.
 
 ## License
 
-This project is licensed under the MIT License.
+This project is licensed under the Apache-2.0 license.
