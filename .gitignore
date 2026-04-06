@@ -1,0 +1,75 @@
+# =============================================================
+# .gitignore — fraud-detection-system
+# =============================================================
+
+# ── SECRETS — NEVER commit these ──────────────────────────────
+# .env holds real API keys, DB passwords, JWT secrets, etc.
+# Use .env.example as the committed reference template.
+.env
+*.env
+.env.*
+!.env.example
+
+# ── Maven build output ────────────────────────────────────────
+target/
+**/target/
+*.jar
+*.war
+*.ear
+*.class
+
+# ── IDE — IntelliJ IDEA ───────────────────────────────────────
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# ── IDE — VS Code ─────────────────────────────────────────────
+.vscode/
+*.code-workspace
+
+# ── IDE — Eclipse ─────────────────────────────────────────────
+.classpath
+.project
+.settings/
+bin/
+
+# ── OS metadata ───────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+desktop.ini
+ehthumbs.db
+
+# ── Logs ──────────────────────────────────────────────────────
+*.log
+logs/
+**/logs/
+spring.log
+
+# ── Node (if frontend added later) ────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ── Test and coverage reports ─────────────────────────────────
+**/surefire-reports/
+**/failsafe-reports/
+**/jacoco/
+**/*.exec
+coverage/
+
+# ── Docker volumes / local data ───────────────────────────────
+docker/data/
+mysql-data/
+redis-data/
+
+# ── Temporary files ───────────────────────────────────────────
+*.tmp
+*.swp
+*.swo
+*~
+*.bak
