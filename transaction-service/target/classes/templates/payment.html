@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Payment Page</title>
+
+    <!-- Razorpay Checkout -->
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+
+    <style>
+        body {
+            font-family: Arial;
+            padding: 24px;
+            background: #f4f6f9;
+        }
+
+        .card {
+            max-width: 520px;
+            margin: 0 auto;
+            background: #ffffff;
+            padding: 24px;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .btn {
+            background: #0a7cff;
+            color: #fff;
+            padding: 14px;
+            border: 0;
+            border-radius: 6px;
+            cursor: pointer;
+            width: 100%;
+            font-size: 16px;
+            margin-top: 16px;
+        }
+
+        .btn:hover {
+            background: #005edb;
+        }
+
+        .muted {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .debug {
+            margin-top: 20px;
+            font-size: 12px;
+            color: #999;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="card">
+
+    <h2>
+        Pay <span th:text="${amount}">0</span>
+        <span th:text="${currency}">INR</span>
+    </h2>
+
+    <p class="muted">
+        Merchant: <b th:text="${merchantName}">Merchant</b>
+    </p>
+
+    <!-- DEBUG INFO (VERY IMPORTANT) -->
+    <div class="debug">
+        <p>Transaction ID: <span th:text="${txnId}"></span></p>
+        <p>Order ID: <span th:text="${orderId}"></span></p>
+        <p>Razorpay Key: <span th:text="${rzpKey}"></span></p>
+    </div>
+
+    <button id="payBtn" class="btn">Pay Securely</button>
+
+</div>
+
+<script th:inline="javascript">
+    const options = {
+        key: /*[[${rzpKey}]]*/ "",
+        currency: /*[[${currency}]]*/ "INR",
+        name: /*[[${merchantName}]]*/ "Merchant",
+        description: "Transaction " + /*[[${txnId}]]*/ "",
+        order_id: /*[[${orderId}]]*/ "",
+
+        handler: function (response) {
+
+            console.log("🔐 Sending to backend for verification", response);
+
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = "/api/razorpay/verify";
+
+            const fields = {
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_signature: response.razorpay_signature,
+                transactionId: /*[[${txnId}]]*/ ""
+            };
+
+            for (let key in fields) {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = key;
+                input.value = fields[key];
+                form.appendChild(input);
+            }
+
+            document.body.appendChild(form);
+            form.submit();
+        },
+
+        modal: {
+            ondismiss: function () {
+                alert("❌ Payment cancelled");
+            }
+        },
+
+        theme: { color: "#3399cc" }
+    };
+
+    document.getElementById('payBtn').onclick = function () {
+
+        console.log("OPTIONS:", options);
+
+        if (!options.order_id || options.order_id === "null") {
+            alert("⚠️ Order not ready yet. Wait 2 seconds and refresh.");
+            return;
+        }
+
+        const rzp = new Razorpay(options);
+        rzp.open();
+    };
+</script>
+
+</body>
+</html>

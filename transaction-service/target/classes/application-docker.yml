@@ -1,0 +1,55 @@
+# =============================================================
+# application-docker.yml — transaction-service
+# Active when: SPRING_PROFILES_ACTIVE=docker
+# =============================================================
+
+spring:
+  config:
+    activate:
+      on-profile: docker
+
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    deserialization:
+      fail-on-unknown-properties: false
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      # Exactly-once delivery: requires acks=all + enable.idempotence=true
+      acks: all
+      retries: 3
+      properties:
+        enable.idempotence: "true"
+        # Suppress __TypeId__ header — consumer uses explicit type mapping instead
+        spring.json.add.type.headers: "false"
+        delivery.timeout.ms: "120000"
+        request.timeout.ms: "30000"
+        linger.ms: "5"
+        batch.size: "16384"
+        compression.type: lz4
+    admin:
+      auto-create: true
+
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+      timeout: 2000ms
+      connect-timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 4
+          min-idle: 1
+          max-wait: 1000ms
+
+# Internal service URLs — Docker service names
+bank-service:
+  url: ${BANK_SERVICE_URL}
+
+fraud-service:
+  url: ${FRAUD_SERVICE_URL}

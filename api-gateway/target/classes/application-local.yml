@@ -1,0 +1,114 @@
+# =============================================================
+# application-local.yml — api-gateway
+# Active when: SPRING_PROFILES_ACTIVE=local  (IntelliJ / mvn spring-boot:run)
+# All URIs point to localhost because services run as separate JVM processes.
+# JWT_SECRET must be set in your local environment or IDE run configuration.
+# =============================================================
+
+spring:
+  config:
+    activate:
+      on-profile: local
+
+  application:
+    name: api-gateway
+
+  cloud:
+    gateway:
+      forwarded:
+        enabled: true
+
+      routes:
+
+        # Auth (PUBLIC — JwtAuthFilter skips /auth/**)
+        - id: auth-service
+          uri: http://localhost:8083
+          predicates:
+            - Path=/auth/**
+          filters:
+            - StripPrefix=0
+
+        # Legacy transaction submit (PROTECTED)
+        - id: transaction-service
+          uri: http://localhost:8081
+          predicates:
+            - Path=/api/transactions
+          filters:
+            - StripPrefix=0
+
+        # Transaction status polling (PROTECTED)
+        - id: transaction-status
+          uri: http://localhost:8081
+          predicates:
+            - Path=/api/transactions/**
+          filters:
+            - StripPrefix=0
+
+        # UPI payments (PROTECTED) — X-User-Email injected by JwtAuthFilter
+        - id: upi-payment
+          uri: http://localhost:8081
+          predicates:
+            - Path=/api/upi/**
+          filters:
+            - StripPrefix=0
+
+        # Fraud result polling (PROTECTED)
+        - id: fraud-detection-service
+          uri: http://localhost:8082
+          predicates:
+            - Path=/api/fraud/**
+          filters:
+            - StripPrefix=0
+
+        # Bank balance (PROTECTED) — internal endpoints NOT exposed
+        - id: bank-balance
+          uri: http://localhost:8084
+          predicates:
+            - Path=/bank/balance
+          filters:
+            - StripPrefix=0
+
+      globalcors:
+        corsConfigurations:
+          '[/**]':
+            allowedOriginPatterns:
+              - "http://localhost:3000"
+            allowedMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+            allowedHeaders: ["*"]
+            exposedHeaders: ["Authorization", "X-Trace-Id"]
+            allowCredentials: true
+            maxAge: 3600
+
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
+
+      httpclient:
+        connect-timeout: 5000
+        response-timeout: 30s
+
+# MANDATORY — JwtAuthFilter reads @Value("${jwt.secret}") with NO fallback.
+# Set JWT_SECRET in your IDE run config or export it in your shell before starting.
+jwt:
+  secret: ${JWT_SECRET}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway,metrics,prometheus
+  endpoint:
+    gateway:
+      enabled: true
+    health:
+      show-details: always
+    prometheus:
+      enabled: true
+
+logging:
+  level:
+    root: INFO
+    com.fraud.gateway: DEBUG
+    org.springframework.cloud.gateway: INFO
+    reactor.netty: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] [traceId=%X{traceId:-GATEWAY}] %-5level %logger{36} - %msg%n"

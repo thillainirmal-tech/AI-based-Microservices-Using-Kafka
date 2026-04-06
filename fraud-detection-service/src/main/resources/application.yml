@@ -1,0 +1,38 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: fraud-detection-service
+
+kafka:
+  topic:
+    transactions: ${KAFKA_TOPIC_TRANSACTIONS:transactions}
+    dlq: ${KAFKA_TOPIC_DLQ:transactions.DLT}
+    notifications: ${KAFKA_TOPIC_NOTIFICATIONS:notifications}
+
+fraud:
+  rules:
+    high-amount-threshold: ${FRAUD_HIGH_AMOUNT_THRESHOLD:10000}
+    max-transactions-per-day: ${FRAUD_MAX_TX_PER_DAY:10}
+    impossible-travel-minutes: ${FRAUD_IMPOSSIBLE_TRAVEL_MIN:5}
+    review-confidence-min: ${FRAUD_REVIEW_CONF_MIN:0.4}
+    review-confidence-max: ${FRAUD_REVIEW_CONF_MAX:0.6}
+    result-ttl-hours: ${FRAUD_RESULT_TTL_HOURS:72}
+
+razorpay:
+  enabled: ${RAZORPAY_ENABLED:true}
+  # FIX: Added :not-configured fallbacks — prevents startup crash in local dev
+  # when RAZORPAY_KEY_ID/SECRET are not exported from .env. In Docker, real values
+  # are injected via docker-compose environment block from .env.
+  key-id: ${RAZORPAY_KEY_ID:not-configured}
+  key-secret: ${RAZORPAY_KEY_SECRET:not-configured}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    prometheus:
+      enabled: true

@@ -1,0 +1,25 @@
+# =============================================================
+# grafana/provisioning/datasources/prometheus.yaml
+# Auto-provisions Prometheus as the default datasource in Grafana.
+# Mounted at /etc/grafana/provisioning (see docker-compose.yml).
+# On first Grafana start, this datasource is created automatically —
+# no manual UI configuration required.
+# =============================================================
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    # uid is stable — dashboards can reference this datasource by uid
+    uid: prometheus-fraud
+    access: proxy
+    # Grafana reaches Prometheus via Docker internal network
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      timeInterval: '15s'
+      httpMethod: POST
+      # Enables exemplars (traces) if you add Tempo later
+      exemplarTraceIdDestinations: []

@@ -1,0 +1,193 @@
+{
+  "info": {
+    "_postman_id": "fraud-detection-api-collection",
+    "name": "AI Fraud Detection System — API Collection",
+    "description": "Complete test collection for the Kafka-driven AI Fraud Detection microservices.\n\nServices:\n- API Gateway:            http://localhost:8080\n- Transaction Service:    http://localhost:8081\n- Fraud Detection Service: http://localhost:8082",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "gateway_url",      "value": "http://localhost:8080" },
+    { "key": "transaction_url",  "value": "http://localhost:8081" },
+    { "key": "fraud_url",        "value": "http://localhost:8082" }
+  ],
+  "item": [
+    {
+      "name": "1. Health Checks",
+      "item": [
+        {
+          "name": "Transaction Service Health",
+          "request": {
+            "method": "GET",
+            "url": "{{transaction_url}}/api/transactions/health",
+            "description": "Verify the transaction-service is running"
+          }
+        },
+        {
+          "name": "Fraud Detection Service Health",
+          "request": {
+            "method": "GET",
+            "url": "{{fraud_url}}/api/fraud/health",
+            "description": "Verify the fraud-detection-service is running"
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Submit Transactions (via Gateway)",
+      "item": [
+        {
+          "name": "✅ SAFE Transaction — Normal Amount",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{gateway_url}}/api/transactions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transactionId\": \"TXN-SAFE-001\",\n  \"userId\": \"USR-42\",\n  \"amount\": 500.00,\n  \"location\": \"Mumbai\",\n  \"device\": \"iPhone-14\",\n  \"merchantCategory\": \"Food\"\n}"
+            },
+            "description": "Normal low-amount transaction. Expected: 202 Accepted. Kafka → Redis → AI → SAFE"
+          }
+        },
+        {
+          "name": "🚨 FRAUD — High Amount (>10,000)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{gateway_url}}/api/transactions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transactionId\": \"TXN-FRAUD-001\",\n  \"userId\": \"USR-42\",\n  \"amount\": 25000.00,\n  \"location\": \"Mumbai\",\n  \"device\": \"iPhone-14\",\n  \"merchantCategory\": \"Electronics\"\n}"
+            },
+            "description": "Amount > 10,000 triggers RULE_BASED FRAUD detection immediately."
+          }
+        },
+        {
+          "name": "🚨 FRAUD — Unknown Location",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{gateway_url}}/api/transactions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transactionId\": \"TXN-FRAUD-002\",\n  \"userId\": \"USR-42\",\n  \"amount\": 3000.00,\n  \"location\": \"Antarctica\",\n  \"device\": \"iPhone-14\",\n  \"merchantCategory\": \"Travel\"\n}"
+            },
+            "description": "Transaction from a location not in user's history → FRAUD. Run TXN-SAFE-001 first to establish 'Mumbai' as known location."
+          }
+        },
+        {
+          "name": "✅ SAFE — First Transaction (New User)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{gateway_url}}/api/transactions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transactionId\": \"TXN-NEW-001\",\n  \"userId\": \"USR-NEW-99\",\n  \"amount\": 1200.00,\n  \"location\": \"Delhi\",\n  \"device\": \"Samsung-Galaxy-S23\",\n  \"merchantCategory\": \"Shopping\"\n}"
+            },
+            "description": "New user with no Redis history. Location check skipped (no known locations). Goes to AI layer."
+          }
+        },
+        {
+          "name": "🚨 FRAUD — High Frequency (Send 10+ times)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{gateway_url}}/api/transactions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transactionId\": \"TXN-FREQ-001\",\n  \"userId\": \"USR-FREQ\",\n  \"amount\": 100.00,\n  \"location\": \"Bangalore\",\n  \"device\": \"MacBook-Pro\",\n  \"merchantCategory\": \"Gaming\"\n}"
+            },
+            "description": "Send this request 11+ times for the same userId to trigger high-frequency FRAUD detection."
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Submit Transactions (Direct — No Gateway)",
+      "item": [
+        {
+          "name": "POST Transaction Direct",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{transaction_url}}/api/transactions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transactionId\": \"TXN-DIRECT-001\",\n  \"userId\": \"USR-DIRECT-10\",\n  \"amount\": 750.50,\n  \"location\": \"Chennai\",\n  \"device\": \"iPad-Pro\",\n  \"merchantCategory\": \"Education\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Fraud Detection — Direct Analysis (Bypass Kafka)",
+      "item": [
+        {
+          "name": "Analyze Transaction Directly (SAFE)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{fraud_url}}/api/fraud/analyze",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transactionId\": \"TXN-DIRECT-SAFE\",\n  \"userId\": \"USR-TEST\",\n  \"amount\": 200.00,\n  \"location\": \"Pune\",\n  \"device\": \"Windows-PC\",\n  \"merchantCategory\": \"Food\",\n  \"timestamp\": \"2024-01-15 10:30:00\"\n}"
+            },
+            "description": "Bypass Kafka and test fraud detection directly. Useful for unit testing the detection engine."
+          }
+        },
+        {
+          "name": "Analyze Transaction Directly (FRAUD — High Amount)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{fraud_url}}/api/fraud/analyze",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transactionId\": \"TXN-DIRECT-FRAUD\",\n  \"userId\": \"USR-TEST\",\n  \"amount\": 99999.99,\n  \"location\": \"Unknown-Country\",\n  \"device\": \"Suspicious-Device\",\n  \"merchantCategory\": \"Crypto\",\n  \"timestamp\": \"2024-01-15 10:30:00\"\n}"
+            },
+            "description": "High amount + unknown location — should immediately return FRAUD from RULE_BASED layer."
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. User History (Redis)",
+      "item": [
+        {
+          "name": "Get User Transaction History",
+          "request": {
+            "method": "GET",
+            "url": "{{fraud_url}}/api/fraud/history/USR-42",
+            "description": "Retrieve USR-42's cached transaction history from Redis. Run some transactions first."
+          }
+        },
+        {
+          "name": "Get History — New User (404)",
+          "request": {
+            "method": "GET",
+            "url": "{{fraud_url}}/api/fraud/history/USR-DOESNT-EXIST",
+            "description": "Should return 404 — no history cached for this user."
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Validation Error Tests",
+      "item": [
+        {
+          "name": "❌ Missing Required Fields",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{transaction_url}}/api/transactions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transactionId\": \"\",\n  \"amount\": -100\n}"
+            },
+            "description": "Should return 400 Bad Request with field-level validation errors."
+          }
+        }
+      ]
+    }
+  ]
+}

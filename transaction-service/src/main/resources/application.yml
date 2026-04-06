@@ -1,0 +1,29 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: transaction-service
+
+kafka:
+  topic:
+    transactions: ${KAFKA_TOPIC_TRANSACTIONS:transactions}
+
+rate-limit:
+  max-requests: ${RATE_LIMIT_MAX_REQUESTS:5}
+  window-seconds: ${RATE_LIMIT_WINDOW_SECONDS:60}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    prometheus:
+      enabled: true
+
+razorpay:
+  # FIX: Added :not-configured fallback — prevents startup crash in local dev
+  # when RAZORPAY_KEY_ID is not exported from .env. In Docker, the real value
+  # is injected via RAZORPAY_KEY_ID in docker-compose environment block.
+  key-id: ${RAZORPAY_KEY_ID:not-configured}

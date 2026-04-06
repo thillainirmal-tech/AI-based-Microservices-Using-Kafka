@@ -1,0 +1,64 @@
+# =============================================================
+# .dockerignore — Docker build context exclusions
+#
+# WHY THIS MATTERS:
+#   docker-compose uses context: . (the project root) so Docker
+#   sends the entire directory tree to the build daemon unless
+#   explicitly excluded. Without this file, compiled target/
+#   directories (can be GB in size) and IDE files are sent on
+#   every docker-compose up --build, dramatically slowing builds.
+#
+# SECURITY NOTE:
+#   .env contains real production secrets. Although no Dockerfile
+#   does COPY .env, excluding it here ensures it can NEVER be
+#   accidentally included if a Dockerfile is modified in future.
+# =============================================================
+
+# ── Maven build output ────────────────────────────────────────
+# Each module's target/ is rebuilt inside Docker by mvn package.
+# Host-side compiled artifacts must never pollute the build layer.
+**/target/
+target/
+
+# ── Secrets ───────────────────────────────────────────────────
+.env
+*.env
+.env.*
+
+# ── Git ───────────────────────────────────────────────────────
+.git/
+.gitignore
+.gitattributes
+
+# ── IDE and editor files ──────────────────────────────────────
+.idea/
+*.iml
+*.iws
+*.ipr
+.classpath
+.project
+.settings/
+*.swp
+*.swo
+*~
+.vscode/
+*.code-workspace
+
+# ── OS metadata ───────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Test and coverage reports ────────────────────────────────
+**/surefire-reports/
+**/failsafe-reports/
+**/jacoco/
+**/*.exec
+
+# ── Docker files (not needed inside image) ───────────────────
+docker-compose*.yml
+*/Dockerfile
+
+# ── Logs ─────────────────────────────────────────────────────
+*.log
+logs/

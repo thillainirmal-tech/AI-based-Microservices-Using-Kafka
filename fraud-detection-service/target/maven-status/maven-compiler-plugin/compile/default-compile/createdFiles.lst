@@ -1,0 +1,15 @@
+com\fraud\detection\service\RedisService.class
+com\fraud\detection\FraudDetectionApplication.class
+com\fraud\detection\model\UserTransactionHistory$UserTransactionHistoryBuilder.class
+com\fraud\detection\config\RedisConfig.class
+com\fraud\detection\exception\GlobalExceptionHandler.class
+com\fraud\detection\config\KafkaConsumerConfig.class
+com\fraud\detection\consumer\TransactionConsumer$1.class
+com\fraud\detection\config\FraudRulesProperties.class
+com\fraud\detection\service\AiFraudAnalysisService.class
+com\fraud\detection\exception\FraudDetectionException.class
+com\fraud\detection\service\FraudDetectionService.class
+com\fraud\detection\model\UserTransactionHistory.class
+com\fraud\detection\consumer\TransactionConsumer.class
+com\fraud\detection\controller\FraudController.class
+com\fraud\detection\config\AiConfig.class

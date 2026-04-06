@@ -1,0 +1,84 @@
+# =============================================================
+# prometheus.yml — Fraud Detection System
+# Mounted into Prometheus container at /etc/prometheus/prometheus.yml
+# =============================================================
+
+global:
+  # How frequently Prometheus scrapes each target
+  scrape_interval: 15s
+  # How frequently Prometheus evaluates alerting rules
+  evaluation_interval: 15s
+  # scrape_timeout must be less than scrape_interval
+  scrape_timeout: 10s
+
+# ════════════════════════════════════════════════════════════
+# APPLICATION SERVICES  (Spring Boot Actuator /actuator/prometheus)
+# ════════════════════════════════════════════════════════════
+
+scrape_configs:
+
+  - job_name: 'auth-service'
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    honor_timestamps: true
+    static_configs:
+      - targets: ['auth-service:8083']
+        labels:
+          service: 'auth-service'
+          environment: 'docker'
+
+  - job_name: 'api-gateway'
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    honor_timestamps: true
+    static_configs:
+      - targets: ['api-gateway:8085']
+        labels:
+          service: 'api-gateway'
+          environment: 'docker'
+
+  - job_name: 'transaction-service'
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    honor_timestamps: true
+    static_configs:
+      - targets: ['transaction-service:8081']
+        labels:
+          service: 'transaction-service'
+          environment: 'docker'
+
+  - job_name: 'fraud-detection-service'
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    honor_timestamps: true
+    static_configs:
+      - targets: ['fraud-detection-service:8082']
+        labels:
+          service: 'fraud-detection-service'
+          environment: 'docker'
+
+  - job_name: 'bank-service'
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    honor_timestamps: true
+    static_configs:
+      - targets: ['bank-service:8084']
+        labels:
+          service: 'bank-service'
+          environment: 'docker'
+
+  - job_name: 'notification-service'
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    honor_timestamps: true
+    static_configs:
+      - targets: ['notification-service:8086']
+        labels:
+          service: 'notification-service'
+          environment: 'docker'

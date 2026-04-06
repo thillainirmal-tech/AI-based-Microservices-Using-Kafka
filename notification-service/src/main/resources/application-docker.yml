@@ -1,0 +1,64 @@
+# =============================================================
+# application-docker.yml — notification-service
+# Active when: SPRING_PROFILES_ACTIVE=docker
+# =============================================================
+
+spring:
+  config:
+    activate:
+      on-profile: docker
+
+  kafka:
+    # FIX NOTE: KafkaConfig.java uses a custom @Bean ConsumerFactory that reads
+    # @Value("${spring.kafka.bootstrap-servers:localhost:9092}") — so this
+    # property IS picked up by @Value injection even with a custom factory.
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+
+    consumer:
+      # NOTE: The properties below (group-id, key-deserializer, value-deserializer)
+      # are NOT used by Spring Boot auto-configuration because KafkaConfig.java
+      # defines a custom @Bean ConsumerFactory that bypasses auto-config entirely.
+      # The actual group-id is read via @Value("${kafka.consumer.group-id:notification-group}")
+      # which is set in application.yml (base config, always loaded).
+      # These entries are kept here for documentation/IDE awareness only.
+      group-id: notification-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+        spring.json.use.type.headers: false
+
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${EMAIL_USERNAME}
+    password: ${EMAIL_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+# kafka.consumer.group-id is the property path KafkaConfig.java actually reads.
+# It is set in application.yml (base config) so it is available in all profiles.
+# Explicitly confirming it here for the docker profile:
+kafka:
+  consumer:
+    group-id: notification-group
+
+# Disable mail health indicator — avoids health check failure when SMTP is unreachable
+# Set to true only if you want to gate the readiness probe on email connectivity
+management:
+  health:
+    mail:
+      enabled: false
+
+logging:
+  level:
+    root: INFO
+    com.fraud.notification: INFO
+    org.apache.kafka: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] [traceId=%X{traceId:-NO_TRACE}] %-5level %logger{36} - %msg%n"

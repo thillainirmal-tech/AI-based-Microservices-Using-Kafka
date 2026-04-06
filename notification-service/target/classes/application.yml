@@ -1,0 +1,27 @@
+server:
+  port: 8086
+
+spring:
+  application:
+    name: notification-service
+
+# Kafka topic + consumer group — resolved from env vars passed by docker-compose.
+# These keys are referenced by:
+#   - @KafkaListener(topics = "${kafka.topic.notifications:notifications}")
+#   - @KafkaListener(groupId = "${kafka.consumer.group-id:notification-group}")
+#   - KafkaConfig.java @Value("${kafka.topic.notifications:notifications}")
+#   - KafkaConfig.java @Value("${kafka.consumer.group-id:notification-group}")
+kafka:
+  topic:
+    notifications: ${KAFKA_TOPIC_NOTIFICATIONS:notifications}
+  consumer:
+    group-id: notification-group
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    prometheus:
+      enabled: true

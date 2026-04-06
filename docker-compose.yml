@@ -1,0 +1,365 @@
+services:
+
+  # ════════════════════════════════════════════════════════════
+  # INFRASTRUCTURE
+  # ════════════════════════════════════════════════════════════
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: fraud-zookeeper
+    restart: unless-stopped
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    volumes:
+      - zookeeper-data:/var/lib/zookeeper/data
+      - zookeeper-log:/var/lib/zookeeper/log
+    healthcheck:
+      # FIX: Use cub (Confluent Utility Belt) — guaranteed present in ALL Confluent images.
+      # nc (netcat) is NOT installed in cp-zookeeper:7.5.0 minimal Ubuntu base.
+      # cub zk-ready checks 2181 is accepting ZooKeeper 4-letter word commands.
+      test: ["CMD", "cub", "zk-ready", "localhost:2181", "5"]
+      interval: 10s
+      timeout: 8s
+      retries: 5
+      start_period: 20s
+    networks:
+      - fraud-network
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: fraud-kafka
+    restart: unless-stopped
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      # ── Core ──────────────────────────────────────────────────────────────
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+
+      # ── Listeners ─────────────────────────────────────────────────────────
+      # PLAINTEXT       — internal Docker network (services use kafka:29092)
+      # PLAINTEXT_HOST  — host machine access (localhost:9092)
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+
+      # ── Single-broker reliability settings (REQUIRED for 1-node cluster) ──
+      # Without these, the broker refuses to start in single-node mode because
+      # it cannot replicate the __consumer_offsets and __transaction_state topics.
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+      KAFKA_MIN_INSYNC_REPLICAS: 1
+
+      # ── Performance ───────────────────────────────────────────────────────
+      KAFKA_NUM_PARTITIONS: 3
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      # FIX: Use the Confluent cub (Confluent Utility Belt) tool which IS available
+      # in cp-kafka:7.5.0. kafka-topics binary also exists but requires broker
+      # to be fully up. cub kafka-ready is the canonical approach.
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 30s
+    networks:
+      - fraud-network
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: fraud-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: >
+      redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - fraud-network
+
+  mysql:
+    image: mysql:8.0
+    container_name: fraud-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: auth_db
+    ports:
+      # FIX: 3307 on host maps to 3306 inside Docker. Services connect to
+      # mysql:3306 (Docker internal), host uses localhost:3307 for tools.
+      - "3307:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./init-mysql.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      # FIX: Added interval, timeout, retries, start_period — previously missing,
+      # causing services with condition: service_healthy to block indefinitely.
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - fraud-network
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: fraud-kafka-ui
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8090:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: fraud-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+    networks:
+      - fraud-network
+
+  # ════════════════════════════════════════════════════════════
+  # MONITORING
+  # ════════════════════════════════════════════════════════════
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: fraud-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+      - "--web.enable-lifecycle"
+    networks:
+      - fraud-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: fraud-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    environment:
+      # FIX: Auto-provision Prometheus datasource so dashboards work out of the box.
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    networks:
+      - fraud-network
+
+  # ════════════════════════════════════════════════════════════
+  # APPLICATION SERVICES
+  # ════════════════════════════════════════════════════════════
+
+  bank-service:
+    build:
+      context: .
+      dockerfile: bank-service/Dockerfile
+    container_name: fraud-bank-service
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    ports:
+      - "8084:8084"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      MYSQL_HOST: ${MYSQL_HOST:-mysql}
+      MYSQL_PORT: ${MYSQL_PORT:-3306}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    networks:
+      - fraud-network
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: auth-service/Dockerfile
+    container_name: fraud-auth-service
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      bank-service:
+        condition: service_started
+    ports:
+      - "8083:8083"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      MYSQL_HOST: ${MYSQL_HOST:-mysql}
+      MYSQL_PORT: ${MYSQL_PORT:-3306}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS}
+      BANK_SERVICE_URL: ${BANK_SERVICE_URL}
+    networks:
+      - fraud-network
+
+  transaction-service:
+    build:
+      context: .
+      dockerfile: transaction-service/Dockerfile
+    container_name: fraud-transaction-service
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      bank-service:
+        condition: service_started
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
+      KAFKA_TOPIC_TRANSACTIONS: ${KAFKA_TOPIC_TRANSACTIONS}
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
+      BANK_SERVICE_URL: ${BANK_SERVICE_URL}
+      FRAUD_SERVICE_URL: ${FRAUD_SERVICE_URL}
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID}
+      RATE_LIMIT_MAX_REQUESTS: ${RATE_LIMIT_MAX_REQUESTS}
+      RATE_LIMIT_WINDOW_SECONDS: ${RATE_LIMIT_WINDOW_SECONDS}
+    networks:
+      - fraud-network
+
+  fraud-detection-service:
+    build:
+      context: .
+      dockerfile: fraud-detection-service/Dockerfile
+    container_name: fraud-fraud-service
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      bank-service:
+        condition: service_started
+    ports:
+      - "8082:8082"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
+      KAFKA_TOPIC_TRANSACTIONS: ${KAFKA_TOPIC_TRANSACTIONS}
+      KAFKA_TOPIC_DLQ: ${KAFKA_TOPIC_DLQ}
+      KAFKA_TOPIC_NOTIFICATIONS: ${KAFKA_TOPIC_NOTIFICATIONS}
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
+      BANK_SERVICE_URL: ${BANK_SERVICE_URL}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      RAZORPAY_ENABLED: ${RAZORPAY_ENABLED}
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET}
+      FRAUD_HIGH_AMOUNT_THRESHOLD: ${FRAUD_HIGH_AMOUNT_THRESHOLD}
+      FRAUD_MAX_TX_PER_DAY: ${FRAUD_MAX_TX_PER_DAY}
+      FRAUD_IMPOSSIBLE_TRAVEL_MIN: ${FRAUD_IMPOSSIBLE_TRAVEL_MIN}
+      FRAUD_REVIEW_CONF_MIN: ${FRAUD_REVIEW_CONF_MIN}
+      FRAUD_REVIEW_CONF_MAX: ${FRAUD_REVIEW_CONF_MAX}
+      FRAUD_RESULT_TTL_HOURS: ${FRAUD_RESULT_TTL_HOURS}
+    networks:
+      - fraud-network
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: notification-service/Dockerfile
+    container_name: fraud-notification-service
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8086:8086"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
+      KAFKA_TOPIC_NOTIFICATIONS: ${KAFKA_TOPIC_NOTIFICATIONS}
+      EMAIL_USERNAME: ${EMAIL_USERNAME}
+      EMAIL_PASSWORD: ${EMAIL_PASSWORD}
+    networks:
+      - fraud-network
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    container_name: fraud-api-gateway
+    restart: unless-stopped
+    depends_on:
+      auth-service:
+        condition: service_started
+      transaction-service:
+        condition: service_started
+      fraud-detection-service:
+        condition: service_started
+      bank-service:
+        condition: service_started
+    ports:
+      - "8085:8085"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      JWT_SECRET: ${JWT_SECRET}
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL}
+      TRANSACTION_SERVICE_URL: ${TRANSACTION_SERVICE_URL}
+      FRAUD_SERVICE_URL: ${FRAUD_SERVICE_URL}
+      BANK_SERVICE_URL: ${BANK_SERVICE_URL}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
+    networks:
+      - fraud-network
+
+# ════════════════════════════════════════════════════════════
+# VOLUMES
+# ════════════════════════════════════════════════════════════
+
+volumes:
+  zookeeper-data:
+  zookeeper-log:
+  kafka-data:
+  redis-data:
+  mysql-data:
+  prometheus-data:
+  grafana-data:
+
+# ════════════════════════════════════════════════════════════
+# NETWORK
+# ════════════════════════════════════════════════════════════
+
+networks:
+  fraud-network:
+    driver: bridge

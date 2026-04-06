@@ -1,0 +1,43 @@
+# =============================================================
+# application-docker.yml — auth-service
+# Active when: SPRING_PROFILES_ACTIVE=docker
+# =============================================================
+
+spring:
+  config:
+    activate:
+      on-profile: docker
+
+  datasource:
+    # Fix: MySQL 8 inside Docker requires allowPublicKeyRetrieval=true
+    # and serverTimezone=UTC to avoid authentication plugin errors.
+    url: jdbc:mysql://${MYSQL_HOST:mysql}:${MYSQL_PORT:3306}/auth_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&characterEncoding=UTF-8
+    username: ${MYSQL_USER}
+    password: ${MYSQL_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      pool-name: AuthHikariPool
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 20000
+      idle-timeout: 300000
+      max-lifetime: 1200000
+      leak-detection-threshold: 60000
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        jdbc.batch_size: 25
+        order_inserts: true
+        order_updates: true
+        connection:
+          isolation: 2
+
+# Internal bank service URL — must use Docker service name
+bank-service:
+  url: ${BANK_SERVICE_URL}

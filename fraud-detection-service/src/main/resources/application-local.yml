@@ -1,0 +1,31 @@
+# =============================================================
+# application-local.yml — fraud-detection-service
+# Active when: SPRING_PROFILES_ACTIVE=local  (IntelliJ / mvn spring-boot:run)
+# =============================================================
+
+spring:
+  config:
+    activate:
+      on-profile: local
+
+  kafka:
+    bootstrap-servers: localhost:9092
+
+    consumer:
+      # FIX: Was "fraud-detection-group" — aligned to match docker profile and
+      # KafkaConsumerConfig.java default: @Value("${spring.kafka.consumer.group-id:fraud-detection-group-v2}")
+      # Mismatched group-ids cause unconsumed messages to pile up when switching profiles.
+      group-id: fraud-detection-group-v2
+      auto-offset-reset: earliest
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY:not-configured}
+
+bank-service:
+  url: http://localhost:8084

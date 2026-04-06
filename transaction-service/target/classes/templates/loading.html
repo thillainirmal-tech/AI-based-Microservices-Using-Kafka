@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Preparing Payment</title>
+
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <style>
+        body {
+            font-family: Arial;
+            text-align: center;
+            padding: 50px;
+            background: #f4f6f9;
+        }
+
+        .box {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            display: inline-block;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .loader {
+            margin: 20px auto;
+            border: 6px solid #f3f3f3;
+            border-top: 6px solid #3399cc;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .text {
+            color: #555;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="box">
+
+    <h2>⏳ Preparing your payment...</h2>
+
+    <div class="loader"></div>
+
+    <p class="text">
+        Please wait while we securely initialize your transaction.
+    </p>
+
+    <!-- DEBUG (REMOVE LATER) -->
+    <p style="font-size:12px;color:#999;">
+        TX: <span th:text="${transactionId}"></span>
+    </p>
+
+</div>
+
+<script th:inline="javascript">
+
+    const txId = /*[[${transactionId}]]*/ "";
+
+    console.log("Loading page for txId:", txId);
+
+    let attempts = 0;
+    const maxAttempts = 10; // ~30 seconds total
+
+    const checkReady = () => {
+
+        attempts++;
+
+        fetch("/api/transactions/" + txId)
+            .then(res => res.json())
+            .then(data => {
+
+                console.log("Polling response:", data);
+
+                //  CONDITION: Razorpay order ready
+                if (data.paymentStatus === "RAZORPAY_ORDER_CREATED"
+                    && data.razorpayOrderId) {
+
+                    console.log("✅ Order ready, redirecting...");
+
+                    window.location.href = "/pay?transactionId=" + txId;
+                    return;
+                }
+
+                // ❌ Still processing → retry
+                if (attempts < maxAttempts) {
+                    setTimeout(checkReady, 3000);
+                } else {
+                    alert("⚠️ Payment is taking longer than expected. Please refresh.");
+                }
+            })
+            .catch(err => {
+                console.error("Polling error:", err);
+
+                if (attempts < maxAttempts) {
+                    setTimeout(checkReady, 3000);
+                } else {
+                    alert("❌ Unable to check payment status. Try again.");
+                }
+            });
+    };
+
+    // Start polling after slight delay
+    setTimeout(checkReady, 2000);
+
+</script>
+
+</body>
+</html>

@@ -1,0 +1,1103 @@
+================================================================================
+   FRAUD DETECTION SYSTEM — COMPLETE POSTMAN TESTING GUIDE
+   Environment: LOCAL (no Docker) | Generated from live source code
+================================================================================
+
+SERVICE PORTS
+─────────────────────────────────────────────────────────────────────────────
+  API Gateway          http://localhost:8085   (all external traffic enters here)
+  Auth Service         http://localhost:8083
+  Transaction Service  http://localhost:8081
+  Fraud Detection      http://localhost:8082
+  Bank Service         http://localhost:8084
+  Notification Service http://localhost:8086   (Kafka consumer only — no REST)
+  Kafka Broker         localhost:9092
+  MySQL                localhost:3306
+  Redis                localhost:6379
+
+GATEWAY ROUTE MAP (local profile — start gateway with --spring.profiles.active=local)
+─────────────────────────────────────────────────────────────────────────────
+  /auth/**                 → localhost:8083  (PUBLIC — no JWT required)
+  /api/transactions        → localhost:8081  (PROTECTED — exact path, POST only)
+  /api/fraud/**            → localhost:8082  (PROTECTED)
+
+  NOTE: The following routes exist in Docker profile only.
+  For local testing, call these service ports DIRECTLY (skip the gateway):
+    /api/transactions/{id}  → GET  http://localhost:8081/api/transactions/{id}
+    /api/upi/pay            → POST http://localhost:8081/api/upi/pay
+    /bank/balance           → GET  http://localhost:8084/bank/balance
+    /bank/account/by-upi/   → GET  http://localhost:8084/bank/account/by-upi/{upiId}
+
+  To expose ALL routes via gateway locally, add these entries to
+  api-gateway/src/main/resources/application-local.yml under spring.cloud.gateway.routes:
+
+    - id: transaction-status
+      uri: http://localhost:8081
+      predicates:
+        - Path=/api/transactions/**
+
+    - id: upi-payment
+      uri: http://localhost:8081
+      predicates:
+        - Path=/api/upi/**
+
+    - id: bank-balance
+      uri: http://localhost:8084
+      predicates:
+        - Path=/bank/balance
+
+SECURITY MODEL
+─────────────────────────────────────────────────────────────────────────────
+  - JWT is validated by the API Gateway (JwtAuthFilter) for all protected routes.
+  - On success, the gateway injects two headers into every downstream request:
+      X-User-Email : <email extracted from JWT subject>
+      X-Trace-Id   : <UUID — generated per request for distributed tracing>
+  - Downstream services derive user identity ONLY from X-User-Email.
+    Never trust userId from the request body on protected endpoints.
+  - Internal bank-service endpoints (/bank/debit, /bank/credit, /bank/refund,
+    /bank/account/create) require header  X-Internal-Service: <caller-name>
+    and are NOT exposed through the gateway. Never call them from Postman.
+  - JWT expires in 24 hours. Re-login to get a fresh token.
+
+PASSWORD POLICY (registration validation)
+─────────────────────────────────────────────────────────────────────────────
+  - Minimum 6 characters
+  - Must contain at least one numeric digit (0–9)
+  - Example valid password: "secret1"
+
+FRAUD DETECTION THRESHOLDS (application.yml defaults)
+─────────────────────────────────────────────────────────────────────────────
+  high-amount-threshold    : 10000 INR   (amounts >= 10000 → FRAUD)
+  max-transactions-per-day : 10          (velocity limit per user/day)
+  impossible-travel-minutes: 5           (same user, 2 cities in < 5 min → FRAUD)
+  review-confidence-min    : 0.4         (AI confidence 0.4–0.6 → REVIEW)
+  review-confidence-max    : 0.6         (AI confidence > 0.6 → FRAUD)
+
+
+================================================================================
+  SECTION 1 — AUTH FLOW
+================================================================================
+
+──────────────────────────────────────────────────────────────────────────────
+  1.1  REGISTER A NEW USER
+──────────────────────────────────────────────────────────────────────────────
+
+  Method  : POST
+  URL     : http://localhost:8085/auth/register
+  Headers :
+    Content-Type: application/json
+
+  Request Body:
+    {
+      "name"     : "Arjun Sharma",
+      "email"    : "arjun.sharma@example.com",
+      "password" : "secure123"
+    }
+
+  Field Rules:
+    name      — 2–100 characters, required
+    email     — valid email format, must be unique
+    password  — minimum 6 characters, must contain at least one digit
+
+  Expected Response (201 Created):
+    {
+      "token"   : "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhcmp1bi5zaGFybWFAZXhhbXBsZS5jb20i...",
+      "email"   : "arjun.sharma@example.com",
+      "name"    : "Arjun Sharma",
+      "upiId"   : "arjunsharma@upi",
+      "message" : "Registration successful"
+    }
+
+  Error — Duplicate email (409 Conflict):
+    {
+      "error": "Email already registered"
+    }
+
+  Error — Weak password (400 Bad Request):
+    {
+      "errors": ["Password must be at least 6 characters and contain at least one number"]
+    }
+
+  ACTION: Copy the "upiId" value (e.g. "arjunsharma@upi") — you will need it
+  to receive payments in later tests. Also save the "token" value.
+
+
+──────────────────────────────────────────────────────────────────────────────
+  1.2  LOGIN
+──────────────────────────────────────────────────────────────────────────────
+
+  Method  : POST
+  URL     : http://localhost:8085/auth/login
+  Headers :
+    Content-Type: application/json
+
+  Request Body:
+    {
+      "email"    : "arjun.sharma@example.com",
+      "password" : "secure123"
+    }
+
+  Expected Response (200 OK):
+    {
+      "token"   : "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhcmp1bi5zaGFybWFAZXhhbXBsZS5jb20i...",
+      "email"   : "arjun.sharma@example.com",
+      "name"    : "Arjun Sharma",
+      "upiId"   : "arjunsharma@upi",
+      "message" : "Login successful"
+    }
+
+  Error — Wrong credentials (401 Unauthorized):
+    {
+      "error": "Invalid email or password"
+    }
+
+
+──────────────────────────────────────────────────────────────────────────────
+  1.3  CAPTURE JWT TOKEN (Postman Environment Variable)
+──────────────────────────────────────────────────────────────────────────────
+
+  In Postman, after login/register succeeds, run this in the "Tests" tab
+  of the login or register request to auto-capture the token:
+
+    var json = pm.response.json();
+    pm.environment.set("jwt_token", json.token);
+    pm.environment.set("user_email", json.email);
+    pm.environment.set("user_upi_id", json.upiId);
+
+  Then use {{jwt_token}} in all subsequent request headers.
+
+
+──────────────────────────────────────────────────────────────────────────────
+  1.4  HOW TO USE BEARER TOKEN
+──────────────────────────────────────────────────────────────────────────────
+
+  All protected endpoints require this header:
+
+    Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
+
+  In Postman:
+    1. Go to the request → "Authorization" tab
+    2. Select Type: "Bearer Token"
+    3. Paste the JWT token into the "Token" field
+    OR set it manually as a header:
+    Key:   Authorization
+    Value: Bearer {{jwt_token}}
+
+  Error — Missing or invalid token (401 Unauthorized):
+    {
+      "traceId"   : "d3f12a8b-...",
+      "timestamp" : "2026-04-05T14:30:00",
+      "httpStatus": 401,
+      "error"     : "Unauthorized",
+      "message"   : "Authorization header missing or malformed. Expected: Bearer <token>",
+      "path"      : "/api/upi/pay"
+    }
+
+
+──────────────────────────────────────────────────────────────────────────────
+  1.5  AUTH HEALTH CHECK
+──────────────────────────────────────────────────────────────────────────────
+
+  Method  : GET
+  URL     : http://localhost:8085/auth/health
+  Headers : (none — public endpoint)
+
+  Expected Response (200 OK):
+    {
+      "status" : "UP",
+      "service": "auth-service"
+    }
+
+
+================================================================================
+  SECTION 2 — UPI PAYMENT FLOW (Primary Flow)
+================================================================================
+
+  PREREQUISITE: Register TWO users to act as payer and payee.
+
+  User A (Payer):  arjun.sharma@example.com  | UPI: arjunsharma@upi
+  User B (Payee):  priya.mehta@example.com   | UPI: priyamehta@upi
+
+  Register User B first so their UPI ID exists in the system.
+  Then login as User A and use User B's UPI ID as the payee.
+
+
+──────────────────────────────────────────────────────────────────────────────
+  2.1  SUBMIT UPI PAYMENT (SAFE — amount below threshold)
+──────────────────────────────────────────────────────────────────────────────
+
+  Method  : POST
+  URL     : http://localhost:8081/api/upi/pay
+            (or http://localhost:8085/api/upi/pay if you added the gateway route)
+  Headers :
+    Content-Type  : application/json
+    Authorization : Bearer {{jwt_token}}
+
+  Request Body:
+    {
+      "payeeUpiId"      : "priyamehta@upi",
+      "amount"          : 500.00,
+      "device"          : "iPhone-14",
+      "location"        : "Mumbai",
+      "merchantCategory": "GROCERY",
+      "paymentMode"     : "BANK"
+    }
+
+  Field Reference:
+    payeeUpiId       — required; UPI ID of the recipient (must be registered)
+    amount           — required; must be > 0.01 INR
+    device           — optional; used by fraud engine for device-change detection
+    location         — optional; used by fraud engine for travel-pattern detection
+    merchantCategory — optional; enriches AI analysis (GROCERY, FUEL, ONLINE, etc.)
+    paymentMode      — "BANK" (simulated) or "RAZORPAY" (real payment gateway)
+
+  Expected Response (202 Accepted):
+    {
+      "transactionId": "f7a3c2d1-8b4e-4f9a-a2b3-c4d5e6f7a8b9",
+      "status"       : "PENDING",
+      "message"      : "Payment submitted for fraud analysis. Poll GET /api/transactions/f7a3c2d1-... for result.",
+      "payerEmail"   : "arjun.sharma@example.com",
+      "payeeUpiId"   : "priyamehta@upi",
+      "amount"       : 500.00,
+      "paymentMode"  : "BANK",
+      "timestamp"    : "2026-04-05T14:30:22.451"
+    }
+
+  ACTION: Copy the "transactionId" value — use it in Section 4 and 5 to poll status.
+
+  In Postman Tests tab (auto-capture):
+    var json = pm.response.json();
+    pm.environment.set("transaction_id", json.transactionId);
+
+
+──────────────────────────────────────────────────────────────────────────────
+  2.2  SUBMIT UPI PAYMENT (FRAUD TRIGGER — amount above 10000 INR)
+──────────────────────────────────────────────────────────────────────────────
+
+  Method  : POST
+  URL     : http://localhost:8081/api/upi/pay
+  Headers :
+    Content-Type  : application/json
+    Authorization : Bearer {{jwt_token}}
+
+  Request Body:
+    {
+      "payeeUpiId"      : "priyamehta@upi",
+      "amount"          : 15000.00,
+      "device"          : "iPhone-14",
+      "location"        : "Mumbai",
+      "merchantCategory": "ELECTRONICS",
+      "paymentMode"     : "BANK"
+    }
+
+  Expected Response (202 Accepted):
+    {
+      "transactionId": "a1b2c3d4-...",
+      "status"       : "PENDING",
+      ...
+    }
+
+  Then poll GET /api/transactions/{id} — you will see fraudStatus: "FRAUD".
+  The high-amount rule triggers at amounts >= 10000 INR (Rule Engine Layer 1).
+
+
+──────────────────────────────────────────────────────────────────────────────
+  2.3  SUBMIT UPI PAYMENT (FRAUD TRIGGER — impossible travel)
+──────────────────────────────────────────────────────────────────────────────
+
+  Send the first payment from "Mumbai", then within 5 minutes send a second
+  payment from "Delhi". The impossible-travel detection (Layer 2, Redis History)
+  will flag the second transaction as FRAUD.
+
+  Second request body (same user, different location within 5 minutes):
+    {
+      "payeeUpiId" : "priyamehta@upi",
+      "amount"     : 200.00,
+      "device"     : "iPhone-14",
+      "location"   : "Delhi",
+      "paymentMode": "BANK"
+    }
+
+  Expected fraud result after polling:
+    {
+      "status"         : "FRAUD",
+      "reason"         : "Impossible travel detected: ...",
+      "confidenceScore": 0.95,
+      "detectionLayer" : "REDIS_HISTORY"
+    }
+
+
+================================================================================
+  SECTION 3 — LEGACY TRANSACTION SUBMIT (POST /api/transactions)
+================================================================================
+
+  This is the older endpoint that accepts a userId in the body.
+  The gateway overrides it with the JWT email — do not rely on body userId.
+
+──────────────────────────────────────────────────────────────────────────────
+  3.1  SUBMIT LEGACY TRANSACTION
+──────────────────────────────────────────────────────────────────────────────
+
+  Method  : POST
+  URL     : http://localhost:8085/api/transactions    (gateway route exists for this)
+  Headers :
+    Content-Type  : application/json
+    Authorization : Bearer {{jwt_token}}
+
+  Request Body:
+    {
+      "transactionId"  : "TXN-LOCAL-001",
+      "userId"         : "arjun.sharma@example.com",
+      "amount"         : 2500.00,
+      "location"       : "Bangalore",
+      "device"         : "Android-Pixel-7",
+      "merchantCategory": "FUEL"
+    }
+
+  Field Rules:
+    transactionId    — required; must be unique; reuse same ID = idempotent replay
+    userId           — required; will be overridden by X-User-Email from JWT
+    amount           — required; > 0.01
+    location         — required
+    device           — required
+    merchantCategory — optional
+
+  Expected Response (202 Accepted):
+    {
+      "transactionId": "TXN-LOCAL-001",
+      "message"      : "Transaction accepted and queued for fraud analysis",
+      "statusCode"   : 202
+    }
+
+  DIFFERENCE FROM UPI FLOW: This endpoint does NOT create a payment record.
+  It only queues to Kafka for fraud analysis. No bank debit/credit happens.
+  The UPI endpoint (Section 2) does the full debit-credit saga after a SAFE verdict.
+
+
+================================================================================
+  SECTION 4 — POLL TRANSACTION STATUS
+================================================================================
+
+──────────────────────────────────────────────────────────────────────────────
+  4.1  GET TRANSACTION STATUS (combined fraud + payment verdict)
+──────────────────────────────────────────────────────────────────────────────
+
+  Method  : GET
+  URL     : http://localhost:8081/api/transactions/{{transaction_id}}
+            (direct to service — not available via local gateway)
+  Headers :
+    Authorization: Bearer {{jwt_token}}
+
+  NOTE: Poll this endpoint every 2–5 seconds after submitting a payment.
+  The fraud pipeline is async via Kafka. First response may be PENDING.
+
+  Response Sequence:
+
+  State 1 — Processing in progress (202 Accepted):
+    {
+      "transactionId"    : "f7a3c2d1-...",
+      "fraudStatus"      : "PENDING",
+      "overallStatus"    : "PENDING",
+      "message"          : "Queued for fraud analysis",
+      "retryAfterSeconds": 3,
+      "timestamp"        : "2026-04-05T14:30:25.000"
+    }
+
+  State 2 — SAFE verdict, payment processing (202 Accepted):
+    {
+      "transactionId"    : "f7a3c2d1-...",
+      "fraudStatus"      : "SAFE",
+      "overallStatus"    : "PENDING",
+      "message"          : "Fraud SAFE — processing payment",
+      "retryAfterSeconds": 2
+    }
+
+  State 3 — COMPLETE (200 OK):
+    {
+      "transactionId"     : "f7a3c2d1-...",
+      "fraudStatus"       : "SAFE",
+      "fraudConfidence"   : 0.1,
+      "fraudDetectionLayer": "RULE_ENGINE",
+      "paymentStatus"     : "SUCCESS",
+      "paymentMode"       : "BANK",
+      "amount"            : 500.00,
+      "payerEmail"        : "arjun.sharma@example.com",
+      "payeeEmail"        : "priya.mehta@example.com",
+      "payeeUpiId"        : "priyamehta@upi",
+      "overallStatus"     : "COMPLETE",
+      "message"           : "Final status",
+      "timestamp"         : "2026-04-05T14:30:28.000"
+    }
+
+  State 4 — BLOCKED by FRAUD (200 OK):
+    {
+      "transactionId"      : "a1b2c3d4-...",
+      "fraudStatus"        : "FRAUD",
+      "fraudConfidence"    : 0.95,
+      "fraudDetectionLayer": "RULE_ENGINE",
+      "fraudReason"        : "Transaction amount 15000 INR exceeds high-risk threshold of 10000 INR",
+      "overallStatus"      : "BLOCKED",
+      "message"            : "Blocked (FRAUD)",
+      "timestamp"          : "2026-04-05T14:30:26.000"
+    }
+
+  State 5 — REVIEW (needs human analyst):
+    {
+      "fraudStatus"        : "REVIEW",
+      "fraudConfidence"    : 0.52,
+      "fraudDetectionLayer": "AI",
+      "overallStatus"      : "BLOCKED",
+      "message"            : "Blocked (REVIEW)"
+    }
+
+  overallStatus Values Reference:
+    PENDING      — Kafka consumer has not yet processed the event
+    COMPLETE     — SAFE fraud verdict + payment SUCCESS
+    BLOCKED      — FRAUD or REVIEW verdict; no money moved
+    FAILED       — Bank debit/credit operation failed after SAFE verdict
+    COMPENSATED  — Payer refunded after failed payee credit (saga rollback)
+    CRITICAL     — Compensation itself failed; manual intervention required
+
+
+================================================================================
+  SECTION 5 — FRAUD DETECTION SERVICE (Direct Endpoints)
+================================================================================
+
+──────────────────────────────────────────────────────────────────────────────
+  5.1  POLL FRAUD RESULT DIRECTLY
+──────────────────────────────────────────────────────────────────────────────
+
+  Method  : GET
+  URL     : http://localhost:8085/api/fraud/result/{{transaction_id}}
+            (available via gateway — /api/fraud/**)
+  Headers :
+    Authorization: Bearer {{jwt_token}}
+
+  Response — Verdict ready (200 OK), SAFE example:
+    {
+      "transactionId"  : "f7a3c2d1-...",
+      "userId"         : "arjun.sharma@example.com",
+      "status"         : "SAFE",
+      "reason"         : "All fraud checks passed — transaction approved",
+      "confidenceScore": 0.08,
+      "detectionLayer" : "RULE_ENGINE",
+      "analyzedAt"     : "2026-04-05 14:30:25"
+    }
+
+  Response — Verdict ready (200 OK), FRAUD example:
+    {
+      "transactionId"  : "a1b2c3d4-...",
+      "userId"         : "arjun.sharma@example.com",
+      "status"         : "FRAUD",
+      "reason"         : "Transaction amount 15000 INR exceeds high-risk threshold of 10000 INR",
+      "confidenceScore": 0.95,
+      "detectionLayer" : "RULE_ENGINE",
+      "analyzedAt"     : "2026-04-05 14:30:23"
+    }
+
+  Response — Still processing (202 Accepted):
+    {
+      "transactionId"    : "f7a3c2d1-...",
+      "status"           : "PENDING",
+      "message"          : "Transaction is queued for processing. Retry ... in 3 seconds.",
+      "retryAfterSeconds": 3,
+      "httpStatus"       : 202
+    }
+
+
+──────────────────────────────────────────────────────────────────────────────
+  5.2  GET PAYMENT RECORD
+──────────────────────────────────────────────────────────────────────────────
+
+  Method  : GET
+  URL     : http://localhost:8085/api/fraud/payment/{{transaction_id}}
+  Headers :
+    Authorization: Bearer {{jwt_token}}
+
+  Response (200 OK) — for a completed UPI payment:
+    {
+      "transactionId" : "f7a3c2d1-...",
+      "paymentStatus" : "SUCCESS",
+      "payerEmail"    : "arjun.sharma@example.com",
+      "payeeEmail"    : "priya.mehta@example.com",
+      "payeeUpiId"    : "priyamehta@upi",
+      "amount"        : 500.00,
+      "paymentMode"   : "BANK"
+    }
+
+  Response (404 Not Found) — for a FRAUD-blocked transaction:
+    {
+      "message": "No payment record for txId=... Transaction may have been blocked (FRAUD/REVIEW) ..."
+    }
+
+
+──────────────────────────────────────────────────────────────────────────────
+  5.3  DIRECT FRAUD ANALYSIS (TEST ONLY — bypasses Kafka)
+──────────────────────────────────────────────────────────────────────────────
+
+  Use this to test fraud rules without going through the full Kafka pipeline.
+  The result is returned synchronously and stored in Redis.
+
+  Method  : POST
+  URL     : http://localhost:8085/api/fraud/analyze
+  Headers :
+    Content-Type  : application/json
+    Authorization : Bearer {{jwt_token}}
+
+  Request Body — SAFE scenario:
+    {
+      "transactionId"  : "TEST-SAFE-001",
+      "userId"         : "arjun.sharma@example.com",
+      "amount"         : 750.00,
+      "location"       : "Mumbai",
+      "device"         : "iPhone-14",
+      "timestamp"      : "2026-04-05T14:30:00",
+      "merchantCategory": "GROCERY"
+    }
+
+  Request Body — FRAUD trigger (high amount):
+    {
+      "transactionId"  : "TEST-FRAUD-001",
+      "userId"         : "arjun.sharma@example.com",
+      "amount"         : 25000.00,
+      "location"       : "Mumbai",
+      "device"         : "iPhone-14",
+      "timestamp"      : "2026-04-05T14:30:00"
+    }
+
+  Expected Response (200 OK) — SAFE:
+    {
+      "transactionId"  : "TEST-SAFE-001",
+      "userId"         : "arjun.sharma@example.com",
+      "status"         : "SAFE",
+      "reason"         : "All fraud checks passed — transaction approved",
+      "confidenceScore": 0.05,
+      "detectionLayer" : "RULE_ENGINE",
+      "analyzedAt"     : "2026-04-05 14:30:01"
+    }
+
+  Expected Response (200 OK) — FRAUD:
+    {
+      "transactionId"  : "TEST-FRAUD-001",
+      "userId"         : "arjun.sharma@example.com",
+      "status"         : "FRAUD",
+      "reason"         : "Transaction amount 25000 INR exceeds high-risk threshold of 10000 INR",
+      "confidenceScore": 0.95,
+      "detectionLayer" : "RULE_ENGINE",
+      "analyzedAt"     : "2026-04-05 14:30:01"
+    }
+
+
+──────────────────────────────────────────────────────────────────────────────
+  5.4  GET USER TRANSACTION HISTORY
+──────────────────────────────────────────────────────────────────────────────
+
+  Method  : GET
+  URL     : http://localhost:8085/api/fraud/history/arjun.sharma@example.com
+  Headers :
+    Authorization: Bearer {{jwt_token}}
+
+  Response (200 OK):
+    {
+      "userId"            : "arjun.sharma@example.com",
+      "recentTransactions": [...],
+      "knownLocations"    : ["Mumbai", "Bangalore"],
+      ...
+    }
+
+  Response (404 Not Found) — no history yet:
+    {
+      "message": "No history for userId=arjun.sharma@example.com. History expires after 24h..."
+    }
+
+
+──────────────────────────────────────────────────────────────────────────────
+  5.5  DELETE FRAUD RESULT (re-processing REVIEW cases)
+──────────────────────────────────────────────────────────────────────────────
+
+  Method  : DELETE
+  URL     : http://localhost:8085/api/fraud/result/{{transaction_id}}
+  Headers :
+    Authorization: Bearer {{jwt_token}}
+
+  Expected Response (204 No Content) — successfully deleted
+  Expected Response (404 Not Found) — no result exists for that ID
+
+
+──────────────────────────────────────────────────────────────────────────────
+  5.6  FRAUD SERVICE HEALTH CHECK
+──────────────────────────────────────────────────────────────────────────────
+
+  Method  : GET
+  URL     : http://localhost:8085/api/fraud/health
+  Headers :
+    Authorization: Bearer {{jwt_token}}
+
+  Expected Response (200 OK):
+    {
+      "service"  : "fraud-detection-service",
+      "status"   : "UP",
+      "timestamp": "2026-04-05T14:30:00"
+    }
+
+
+================================================================================
+  SECTION 6 — BANK SERVICE
+================================================================================
+
+  NOTE: Bank internal endpoints (/bank/debit, /bank/credit, /bank/refund,
+  /bank/account/create) require the X-Internal-Service header and are called
+  ONLY by other services. Do NOT call these from Postman in production testing.
+  They are documented here for debugging only.
+
+──────────────────────────────────────────────────────────────────────────────
+  6.1  GET BALANCE (authenticated user's own balance)
+──────────────────────────────────────────────────────────────────────────────
+
+  Method  : GET
+  URL     : http://localhost:8084/bank/balance
+            (direct to service — not in local gateway profile)
+  Headers :
+    Authorization : Bearer {{jwt_token}}
+
+  Expected Response (200 OK):
+    {
+      "userId"  : "arjun.sharma@example.com",
+      "upiId"   : "arjunsharma@upi",
+      "balance" : 9500.00,
+      "currency": "INR"
+    }
+
+  Error — No JWT / header missing (401 Unauthorized):
+    HTTP 401 with empty body
+
+  NOTE: Identity comes from X-User-Email (injected by gateway from JWT).
+  If calling the service directly (bypassing gateway), the gateway's
+  X-User-Email injection does NOT happen. Add it manually for direct calls:
+    X-User-Email: arjun.sharma@example.com
+
+
+──────────────────────────────────────────────────────────────────────────────
+  6.2  LOOKUP ACCOUNT BY UPI ID
+──────────────────────────────────────────────────────────────────────────────
+
+  Method  : GET
+  URL     : http://localhost:8084/bank/account/by-upi/priyamehta@upi
+  Headers :
+    Authorization: Bearer {{jwt_token}}
+
+  Expected Response (200 OK):
+    {
+      "userId"       : "priya.mehta@example.com",
+      "upiId"        : "priyamehta@upi",
+      "accountNumber": "ACC-PRY-00123",
+      "bankName"     : "FraudSafe Bank",
+      "ifsc"         : "FRSB0001234",
+      "balance"      : 12000.00,
+      "createdAt"    : "2026-04-05T10:00:00"
+    }
+
+  Use this to verify a payee UPI ID before making a payment.
+
+
+──────────────────────────────────────────────────────────────────────────────
+  6.3  BANK SERVICE HEALTH CHECK
+──────────────────────────────────────────────────────────────────────────────
+
+  Method  : GET
+  URL     : http://localhost:8084/bank/health
+  Headers : (none required)
+
+  Expected Response (200 OK):
+    {
+      "status" : "UP",
+      "service": "bank-service"
+    }
+
+
+──────────────────────────────────────────────────────────────────────────────
+  6.4  INTERNAL ENDPOINTS (DEBUGGING ONLY — not for normal testing)
+──────────────────────────────────────────────────────────────────────────────
+
+  These require X-Internal-Service header. They will return 403 without it.
+
+  POST /bank/debit — called by fraud-detection-service after SAFE verdict
+    Header : X-Internal-Service: fraud-detection-service
+    Body   : { "userId": "arjun.sharma@example.com", "amount": 500.00, "transactionId": "f7a3..." }
+
+  POST /bank/credit — called by fraud-detection-service after SAFE verdict
+    Header : X-Internal-Service: fraud-detection-service
+    Body   : { "userId": "priya.mehta@example.com", "amount": 500.00, "transactionId": "f7a3..." }
+
+  POST /bank/refund — called during saga compensation (failed credit rollback)
+    Header : X-Internal-Service: fraud-detection-service
+    Body   : { "userId": "arjun.sharma@example.com", "amount": 500.00, "transactionId": "f7a3..." }
+
+  POST /bank/account/create — called by auth-service on registration
+    Header : X-Internal-Service: auth-service
+    Body   : { "userId": "new.user@example.com", "upiId": "newuser@upi" }
+
+
+================================================================================
+  SECTION 7 — NOTIFICATION SERVICE
+================================================================================
+
+  The notification service has NO REST API. It is a pure Kafka consumer.
+  It listens on the "notifications" Kafka topic and sends HTML emails.
+
+  How it works:
+    1. fraud-detection-service publishes a NotificationEvent to Kafka after:
+       - A SAFE transaction completes (SUCCESS / FAILED / COMPENSATED)
+       - A FRAUD verdict is issued (email alerts payer of blocked transaction)
+    2. notification-service consumes the event and sends an HTML email via SMTP.
+
+  NotificationEvent structure (published internally — for reference):
+    {
+      "transactionId": "f7a3c2d1-...",
+      "userEmail"    : "arjun.sharma@example.com",
+      "payeeEmail"   : "priya.mehta@example.com",
+      "payeeUpiId"   : "priyamehta@upi",
+      "amount"       : 500.00,
+      "status"       : "SUCCESS",
+      "message"      : "Your UPI payment of ₹500.00 was successful."
+    }
+
+  status values in NotificationEvent:
+    SUCCESS   — payment completed; both payer and payee receive email
+    FAILED    — bank debit/credit failed; payer is notified
+    FRAUD     — transaction blocked by fraud engine; payer is warned
+    COMPENSATED — refund processed; payer is notified
+
+  How to verify notification delivery in Postman testing:
+    1. Submit a payment via POST /api/upi/pay
+    2. Poll GET /api/transactions/{id} until overallStatus = "COMPLETE"
+    3. Check the email inbox configured in application.yml (SMTP_USERNAME)
+       for an HTML email with subject "UPI Transaction Notification"
+    4. Check notification-service console logs for:
+         [NOTIFICATION] Email sent successfully to arjun.sharma@example.com
+
+  SMTP configuration in notification-service application.yml:
+    host : smtp.gmail.com   (or your configured SMTP host)
+    port : 587
+    username: ${SMTP_USERNAME}
+    password: ${SMTP_PASSWORD}
+
+  If you have not configured real SMTP credentials, the email will fail
+  but the Kafka consumer will still log receipt of the event. Check logs
+  for: [NOTIFICATION] Email sending failed — this is expected without SMTP.
+
+  To verify Kafka message flow without email, use kafka-console-consumer:
+    kafka-console-consumer.sh \
+      --bootstrap-server localhost:9092 \
+      --topic notifications \
+      --from-beginning
+
+
+================================================================================
+  SECTION 8 — COMPLETE END-TO-END TEST SEQUENCE
+================================================================================
+
+  Follow these steps in exact order for a complete system walkthrough.
+  This sequence tests every service, Kafka flow, and Redis state.
+
+  ──────────────────────────────────────────────────────────────────────────
+  STEP 1: REGISTER PAYEE (User B)
+  ──────────────────────────────────────────────────────────────────────────
+
+    POST http://localhost:8085/auth/register
+    Body: { "name": "Priya Mehta", "email": "priya.mehta@example.com", "password": "pay123" }
+
+    ✓ Expected: 201 Created
+    ✓ Note the upiId in the response (e.g. "priyamehta@upi")
+
+
+  ──────────────────────────────────────────────────────────────────────────
+  STEP 2: REGISTER PAYER (User A)
+  ──────────────────────────────────────────────────────────────────────────
+
+    POST http://localhost:8085/auth/register
+    Body: { "name": "Arjun Sharma", "email": "arjun.sharma@example.com", "password": "secure123" }
+
+    ✓ Expected: 201 Created
+    ✓ Note the token and upiId
+
+
+  ──────────────────────────────────────────────────────────────────────────
+  STEP 3: LOGIN AS PAYER (User A)
+  ──────────────────────────────────────────────────────────────────────────
+
+    POST http://localhost:8085/auth/login
+    Body: { "email": "arjun.sharma@example.com", "password": "secure123" }
+
+    ✓ Expected: 200 OK
+    ✓ Copy the token → save as {{jwt_token}}
+
+
+  ──────────────────────────────────────────────────────────────────────────
+  STEP 4: VERIFY PAYER BALANCE (before transaction)
+  ──────────────────────────────────────────────────────────────────────────
+
+    GET http://localhost:8084/bank/balance
+    Header: Authorization: Bearer {{jwt_token}}
+
+    ✓ Expected: 200 OK with balance field
+    ✓ Note the current balance (e.g. 10000.00)
+
+
+  ──────────────────────────────────────────────────────────────────────────
+  STEP 5: SUBMIT UPI PAYMENT
+  ──────────────────────────────────────────────────────────────────────────
+
+    POST http://localhost:8081/api/upi/pay
+    Header: Authorization: Bearer {{jwt_token}}
+    Body:
+      {
+        "payeeUpiId" : "priyamehta@upi",
+        "amount"     : 500.00,
+        "device"     : "iPhone-14",
+        "location"   : "Mumbai",
+        "paymentMode": "BANK"
+      }
+
+    ✓ Expected: 202 Accepted
+    ✓ Copy transactionId → save as {{transaction_id}}
+
+
+  ──────────────────────────────────────────────────────────────────────────
+  STEP 6: POLL TRANSACTION STATUS
+  ──────────────────────────────────────────────────────────────────────────
+
+    GET http://localhost:8081/api/transactions/{{transaction_id}}
+    Header: Authorization: Bearer {{jwt_token}}
+
+    Repeat every 3 seconds until overallStatus is not "PENDING".
+
+    ✓ First poll: overallStatus = "PENDING" (Kafka queue)
+    ✓ Second poll: fraudStatus = "SAFE", overallStatus = "PENDING" (payment processing)
+    ✓ Third poll: overallStatus = "COMPLETE", paymentStatus = "SUCCESS"
+
+
+  ──────────────────────────────────────────────────────────────────────────
+  STEP 7: VERIFY FRAUD RESULT
+  ──────────────────────────────────────────────────────────────────────────
+
+    GET http://localhost:8085/api/fraud/result/{{transaction_id}}
+    Header: Authorization: Bearer {{jwt_token}}
+
+    ✓ Expected: 200 OK
+    ✓ Verify status = "SAFE", detectionLayer = "RULE_ENGINE"
+    ✓ Verify analyzedAt is populated
+
+
+  ──────────────────────────────────────────────────────────────────────────
+  STEP 8: VERIFY PAYER BALANCE (deducted)
+  ──────────────────────────────────────────────────────────────────────────
+
+    GET http://localhost:8084/bank/balance
+    Header: Authorization: Bearer {{jwt_token}}
+
+    ✓ Expected: previous balance minus 500.00 (e.g. 9500.00)
+
+
+  ──────────────────────────────────────────────────────────────────────────
+  STEP 9: VERIFY PAYEE BALANCE (credited)
+  ──────────────────────────────────────────────────────────────────────────
+
+    Login as Priya (User B) and get a new JWT token, then:
+
+    GET http://localhost:8084/bank/balance
+    Header: Authorization: Bearer {{priya_jwt_token}}
+
+    ✓ Expected: previous balance plus 500.00
+
+
+  ──────────────────────────────────────────────────────────────────────────
+  STEP 10: VERIFY NOTIFICATION
+  ──────────────────────────────────────────────────────────────────────────
+
+    Check notification-service logs for:
+      [NOTIFICATION] Received → NotificationEvent{transactionId=..., status=SUCCESS}
+      [NOTIFICATION] Email sent successfully to arjun.sharma@example.com
+
+    Check SMTP inbox for HTML email with subject "UPI Transaction Notification".
+
+    ✓ If SMTP is not configured, log entry confirms Kafka event was received.
+
+
+  ──────────────────────────────────────────────────────────────────────────
+  STEP 11: TEST FRAUD BLOCK (high-amount)
+  ──────────────────────────────────────────────────────────────────────────
+
+    POST http://localhost:8081/api/upi/pay
+    Header: Authorization: Bearer {{jwt_token}}
+    Body:
+      {
+        "payeeUpiId" : "priyamehta@upi",
+        "amount"     : 15000.00,
+        "device"     : "iPhone-14",
+        "location"   : "Mumbai",
+        "paymentMode": "BANK"
+      }
+
+    ✓ Expected: 202 Accepted with new transactionId
+
+    Then poll GET /api/transactions/{new_id}:
+    ✓ Expected: fraudStatus = "FRAUD", overallStatus = "BLOCKED"
+    ✓ Verify payer balance has NOT changed (no debit on FRAUD)
+    ✓ Check logs for: [NOTIFICATION] ... status=FRAUD
+
+
+================================================================================
+  SECTION 9 — POSTMAN ENVIRONMENT SETUP
+================================================================================
+
+  Create a Postman Environment called "FraudSystem-Local" with these variables:
+
+    Variable Name      | Initial Value                    | Description
+    ──────────────────────────────────────────────────────────────────────────
+    base_url           | http://localhost:8085            | Gateway base URL
+    tx_service_url     | http://localhost:8081            | Transaction service (direct)
+    fraud_service_url  | http://localhost:8082            | Fraud service (direct)
+    bank_service_url   | http://localhost:8084            | Bank service (direct)
+    jwt_token          | (empty — populated after login)  | Current JWT Bearer token
+    transaction_id     | (empty — populated after pay)    | Last transaction ID
+    user_email         | (empty — populated after login)  | Logged-in user's email
+    user_upi_id        | (empty — populated after login)  | Logged-in user's UPI ID
+    payee_upi_id       | priyamehta@upi                   | Target payee for tests
+
+  Pre-request script (add to Collection level to auto-refresh token):
+    // No auto-refresh needed — JWT is valid for 24 hours
+    // Re-run login request if you get 401 errors
+
+
+================================================================================
+  SECTION 10 — DEBUGGING GUIDE
+================================================================================
+
+  SYMPTOM: 401 Unauthorized on any protected endpoint
+  ─────────────────────────────────────────────────────
+  ✓ Check token is not expired (tokens last 24 hours)
+  ✓ Ensure header is exactly: Authorization: Bearer <token>
+  ✓ No extra spaces before/after token
+  ✓ Re-run login to get a fresh token
+
+  SYMPTOM: Transaction stuck at PENDING forever
+  ─────────────────────────────────────────────────────
+  ✓ Verify Kafka is running: kafka-topics.sh --bootstrap-server localhost:9092 --list
+  ✓ Check transaction-service logs for: [TX-LIFECYCLE] SUBMITTED
+  ✓ Check fraud-detection-service logs for: [FRAUD ENGINE] START
+  ✓ Verify Redis is running: redis-cli ping → should return PONG
+  ✓ Check fraud-detection-service logs for any deserialization errors
+
+  SYMPTOM: 400 Bad Request on /api/upi/pay
+  ─────────────────────────────────────────────────────
+  ✓ payeeUpiId is required and cannot be blank
+  ✓ amount must be > 0.01
+  ✓ Verify payeeUpiId exists (use /bank/account/by-upi/{upiId} to check)
+
+  SYMPTOM: /bank/balance returns 401
+  ─────────────────────────────────────────────────────
+  ✓ If calling directly (port 8084), the gateway has NOT injected X-User-Email
+  ✓ Manually add header: X-User-Email: arjun.sharma@example.com
+  ✓ This header is normally injected by the gateway from the JWT — add it yourself
+    when bypassing the gateway for direct service calls
+
+  SYMPTOM: Payment goes to FAILED or COMPENSATED
+  ─────────────────────────────────────────────────────
+  ✓ Check bank-service logs for debit/credit failures
+  ✓ Verify payer has sufficient balance
+  ✓ Verify payee UPI ID is registered
+  ✓ Check MySQL connection: bank_db table accounts
+
+  SYMPTOM: 403 on /bank/debit or /bank/credit
+  ─────────────────────────────────────────────────────
+  ✓ These are internal endpoints — they require X-Internal-Service header
+  ✓ Add: X-Internal-Service: fraud-detection-service
+  ✓ These are designed for service-to-service calls only
+
+  SYMPTOM: Notification not received
+  ─────────────────────────────────────────────────────
+  ✓ Check notification-service logs for: [NOTIFICATION] Received
+  ✓ If "Email sending failed" — SMTP credentials not configured
+  ✓ Use kafka-console-consumer to verify the Kafka message was published:
+      kafka-console-consumer.sh --bootstrap-server localhost:9092 \
+        --topic notifications --from-beginning --max-messages 5
+
+  SYMPTOM: Gateway returns 404 for /api/upi/** or /api/transactions/**
+  ─────────────────────────────────────────────────────
+  ✓ These routes are NOT in application-local.yml (only in docker profile)
+  ✓ Solution A: Call transaction-service directly on port 8081
+  ✓ Solution B: Add the missing routes to application-local.yml (see top of guide)
+  ✓ Ensure gateway started with: --spring.profiles.active=local
+
+
+================================================================================
+  SECTION 11 — SERVICE HEALTH CHECKS (Quick Smoke Test)
+================================================================================
+
+  Run these first before any functional testing to confirm all services are up.
+
+  #  Service               URL                                    Expected
+  ─────────────────────────────────────────────────────────────────────────
+  1  Auth Service          GET /auth/health                       {"status":"UP"}
+                           http://localhost:8085/auth/health
+
+  2  Fraud Detection       GET /api/fraud/health (with JWT)       {"status":"UP"}
+                           http://localhost:8085/api/fraud/health
+
+  3  Bank Service          GET /bank/health (no auth)             {"status":"UP"}
+                           http://localhost:8084/bank/health
+
+  4  Transaction Svc       GET /api/transactions/health (no auth) {"status":"..."}
+                           http://localhost:8081/api/transactions/health
+
+  5  Gateway Actuator      GET /actuator/health                   {"status":"UP"}
+                           http://localhost:8085/actuator/health
+
+  NOTE: If any service is DOWN, check its logs and verify MySQL, Kafka, and
+  Redis are running before proceeding with functional tests.
+
+
+================================================================================
+  SECTION 12 — KAFKA TOPIC REFERENCE
+================================================================================
+
+  Topic               Service           Direction     Purpose
+  ──────────────────────────────────────────────────────────────────────────
+  transactions        transaction-svc   PRODUCE       UPI/legacy transactions
+                      fraud-detection   CONSUME       Fraud analysis input
+
+  transactions.DLT    fraud-detection   PRODUCE       Dead-letter queue (after 3 retries)
+
+  notifications       fraud-detection   PRODUCE       Payment outcome events
+                      notification-svc  CONSUME       Email delivery
+
+
+  Consumer Groups:
+    fraud-detection-group-v2  → fraud-detection-service (transactions topic)
+    notification-group        → notification-service (notifications topic)
+
+
+  Useful Kafka CLI commands (run from Kafka bin directory):
+
+  List all topics:
+    kafka-topics.sh --bootstrap-server localhost:9092 --list
+
+  Inspect consumer group lag (is fraud-detection keeping up?):
+    kafka-consumer-groups.sh --bootstrap-server localhost:9092 \
+      --group fraud-detection-group-v2 --describe
+
+  Consume latest transactions messages (live monitoring):
+    kafka-console-consumer.sh --bootstrap-server localhost:9092 \
+      --topic transactions --from-beginning
+
+  Consume DLQ (failed messages):
+    kafka-console-consumer.sh --bootstrap-server localhost:9092 \
+      --topic transactions.DLT --from-beginning
+
+
+================================================================================
+  END OF DEVELOPER TESTING GUIDE
+  Source: Kafka-Microservice-Payment-wallet-main (fraud-detection-system)
+  Derived from live source code — accurate as of April 2026
+================================================================================

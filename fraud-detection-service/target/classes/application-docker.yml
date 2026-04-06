@@ -1,0 +1,98 @@
+# =============================================================
+# application-docker.yml — fraud-detection-service
+# Active when: SPRING_PROFILES_ACTIVE=docker
+# =============================================================
+
+spring:
+  config:
+    activate:
+      on-profile: docker
+
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    deserialization:
+      fail-on-unknown-properties: false
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+
+    consumer:
+      # Fix: must match @KafkaListener groupId in TransactionConsumer.java
+      group-id: fraud-detection-group-v2
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      properties:
+        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
+        spring.json.trusted.packages: "com.fraud.*"
+        spring.json.value.default.type: com.fraud.common.dto.TransactionEvent
+        spring.json.use.type.headers: false
+        session.timeout.ms: 30000
+        heartbeat.interval.ms: 10000
+        max.poll.interval.ms: 600000
+        max.poll.records: 10
+        fetch.min.bytes: 1
+        fetch.max.wait.ms: 500
+
+    # -------------------------------------------------------------------------
+    # NOTE: THIS PRODUCER BLOCK IS NOT ACTIVE.
+    #
+    # KafkaNotificationProducerConfig.java defines the real ProducerFactory and
+    # KafkaTemplate ("notificationKafkaTemplate") with JsonSerializer, acks=all,
+    # retries=3, and enable.idempotence=true — applied in ALL profiles (local+docker).
+    #
+    # Spring Boot's @ConditionalOnMissingBean(KafkaTemplate.class) backs off once
+    # that custom bean is registered, so the YAML auto-config producer below is
+    # never applied at runtime.
+    #
+    # Kept here for documentation only — shows intended settings for reference.
+    # DO NOT delete; DO NOT rely on these values being active.
+    # -------------------------------------------------------------------------
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 3
+      properties:
+        enable.idempotence: true
+        spring.json.add.type.headers: false
+
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+      timeout: 2000ms
+      connect-timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
+          max-wait: 1000ms
+
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY}
+      chat:
+        options:
+          model: gpt-4o-mini
+          temperature: 0.1
+          max-tokens: 150
+
+# Internal bank service URL — Docker service name
+bank-service:
+  url: ${BANK_SERVICE_URL}
+
+logging:
+  level:
+    root: INFO
+    com.fraud.detection: INFO
+    org.apache.kafka: WARN
+    org.springframework.kafka: INFO
+    org.springframework.data.redis: WARN
+    org.springframework.ai: WARN
+    io.lettuce: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] [traceId=%X{traceId:-NO_TRACE}] [txId=%X{transactionId:-}] %-5level %logger{36} - %msg%n"

@@ -1,0 +1,109 @@
+# =============================================================
+# application-docker.yml — api-gateway
+# Active when: SPRING_PROFILES_ACTIVE=docker
+# Overrides application.yml with Docker service name URLs.
+# =============================================================
+
+spring:
+  config:
+    activate:
+      on-profile: docker
+
+  cloud:
+    gateway:
+      forwarded:
+        enabled: true
+
+      routes:
+
+        # Auth (PUBLIC — no JWT required)
+        - id: auth-service
+          uri: ${AUTH_SERVICE_URL}
+          predicates:
+            - Path=/auth/**
+          filters:
+            - StripPrefix=0
+
+        # Legacy transaction submit (PROTECTED)
+        - id: transaction-service
+          uri: ${TRANSACTION_SERVICE_URL}
+          predicates:
+            - Path=/api/transactions
+          filters:
+            - StripPrefix=0
+
+        # Transaction status polling (PROTECTED)
+        - id: transaction-status
+          uri: ${TRANSACTION_SERVICE_URL}
+          predicates:
+            - Path=/api/transactions/**
+          filters:
+            - StripPrefix=0
+
+        # UPI payments (PROTECTED) — X-User-Email injected by JwtAuthFilter
+        - id: upi-payment
+          uri: ${TRANSACTION_SERVICE_URL}
+          predicates:
+            - Path=/api/upi/**
+          filters:
+            - StripPrefix=0
+
+        # Fraud result polling (PROTECTED)
+        - id: fraud-detection-service
+          uri: ${FRAUD_SERVICE_URL}
+          predicates:
+            - Path=/api/fraud/**
+          filters:
+            - StripPrefix=0
+
+        # Bank balance only (PROTECTED) — internal endpoints NOT exposed externally
+        - id: bank-balance
+          uri: ${BANK_SERVICE_URL}
+          predicates:
+            - Path=/bank/balance
+          filters:
+            - StripPrefix=0
+
+      globalcors:
+        corsConfigurations:
+          '[/**]':
+            allowedOriginPatterns:
+              - ${ALLOWED_ORIGINS}
+            allowedMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+            allowedHeaders: ["*"]
+            exposedHeaders: ["Authorization", "X-Trace-Id"]
+            allowCredentials: true
+            maxAge: 3600
+
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
+
+      httpclient:
+        connect-timeout: 5000
+        response-timeout: 30s
+
+# JWT secret — must match auth-service JWT_SECRET exactly
+jwt:
+  secret: ${JWT_SECRET}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway,metrics,prometheus
+  endpoint:
+    gateway:
+      enabled: true
+    health:
+      show-details: always
+    prometheus:
+      enabled: true
+
+logging:
+  level:
+    root: INFO
+    com.fraud.gateway: INFO
+    org.springframework.cloud.gateway: WARN
+    reactor.netty: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] [traceId=%X{traceId:-GATEWAY}] %-5level %logger{36} - %msg%n"

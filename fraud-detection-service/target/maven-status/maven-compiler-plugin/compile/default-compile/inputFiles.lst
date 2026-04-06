@@ -1,0 +1,13 @@
+C:\Users\shanm\paymentApp\fraud-detection-system\fraud-detection-service\src\main\java\com\fraud\detection\config\AiConfig.java
+C:\Users\shanm\paymentApp\fraud-detection-system\fraud-detection-service\src\main\java\com\fraud\detection\config\FraudRulesProperties.java
+C:\Users\shanm\paymentApp\fraud-detection-system\fraud-detection-service\src\main\java\com\fraud\detection\config\KafkaConsumerConfig.java
+C:\Users\shanm\paymentApp\fraud-detection-system\fraud-detection-service\src\main\java\com\fraud\detection\config\RedisConfig.java
+C:\Users\shanm\paymentApp\fraud-detection-system\fraud-detection-service\src\main\java\com\fraud\detection\consumer\TransactionConsumer.java
+C:\Users\shanm\paymentApp\fraud-detection-system\fraud-detection-service\src\main\java\com\fraud\detection\controller\FraudController.java
+C:\Users\shanm\paymentApp\fraud-detection-system\fraud-detection-service\src\main\java\com\fraud\detection\exception\FraudDetectionException.java
+C:\Users\shanm\paymentApp\fraud-detection-system\fraud-detection-service\src\main\java\com\fraud\detection\exception\GlobalExceptionHandler.java
+C:\Users\shanm\paymentApp\fraud-detection-system\fraud-detection-service\src\main\java\com\fraud\detection\FraudDetectionApplication.java
+C:\Users\shanm\paymentApp\fraud-detection-system\fraud-detection-service\src\main\java\com\fraud\detection\model\UserTransactionHistory.java
+C:\Users\shanm\paymentApp\fraud-detection-system\fraud-detection-service\src\main\java\com\fraud\detection\service\AiFraudAnalysisService.java
+C:\Users\shanm\paymentApp\fraud-detection-system\fraud-detection-service\src\main\java\com\fraud\detection\service\FraudDetectionService.java
+C:\Users\shanm\paymentApp\fraud-detection-system\fraud-detection-service\src\main\java\com\fraud\detection\service\RedisService.java

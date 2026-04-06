@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                             https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- =====================================================
+         common-dto — Shared Data Transfer Objects
+         Used by both transaction-service and fraud-detection-service
+         to ensure consistent message format over Kafka
+         ===================================================== -->
+    <parent>
+        <groupId>com.fraud</groupId>
+        <artifactId>fraud-detection-system</artifactId>
+        <version>1.0.0</version>
+    </parent>
+
+    <artifactId>common-dto</artifactId>
+    <packaging>jar</packaging>
+    <name>Common DTO Module</name>
+
+    <dependencies>
+        <!-- Jackson for JSON serialization (used in Kafka messages) -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
+        </dependency>
+    </dependencies>
+</project>
