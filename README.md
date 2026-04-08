@@ -462,7 +462,18 @@ Frontend runs at **http://localhost:3000** in development mode (direct to API Ga
 
 ## 📸 Screenshots
 
-> *Screenshots and demo GIF coming soon*
+ <img width="1920" height="1080" alt="demo-16" src="https://github.com/user-attachments/assets/69a4a152-d94f-4019-af3e-9cfc1cfbafea" />
+ <img width="1920" height="1080" alt="demo-15" src="https://github.com/user-attachments/assets/a121fdd1-06a6-4a6b-8769-b19bda951dc8" />
+ <img width="1920" height="1080" alt="demo-09" src="https://github.com/user-attachments/assets/0f97b9c1-bdee-49fd-ac85-23eb9d045d81" />
+    <img width="1920" height="1080" alt="demo-19" src="https://github.com/user-attachments/assets/de7f9592-6dd6-411e-ab12-f16eee784843" />
+  <img width="1920" height="1080" alt="demo-21" src="https://github.com/user-attachments/assets/79752bb6-536f-413b-b0be-1b97fba8a3b3" />
+ <img width="1920" height="1080" alt="demo-23" src="https://github.com/user-attachments/assets/d2bb18f5-928c-4cdc-96ab-17ecbfdbcf3f" />
+ <img width="1920" height="1080" alt="demo-24" src="https://github.com/user-attachments/assets/7cf5c596-5377-4908-965d-83dda7d958b3" />
+<img width="1920" height="1080" alt="demo-25" src="https://github.com/user-attachments/assets/d96057b0-4861-457f-af5a-ff24884dc584" />
+<img width="1920" height="1080" alt="demo-26" src="https://github.com/user-attachments/assets/6a2f101e-6736-444c-b109-3f995f133d5d" />
+<img width="1920" height="1080" alt="demo-27" src="https://github.com/user-attachments/assets/4d20ddfc-7747-48dc-aeb6-f54d8674be92" /> 
+<img width="1920" height="1080" alt="demo-37" src="https://github.com/user-attachments/assets/8222f666-b839-4d07-b57d-6af0d0863e6a" />
+<img width="1920" height="1080" alt="demo-38" src="https://github.com/user-attachments/assets/c326c8f8-6f4b-4876-828a-ecbcb28afd00" />
 
 | Screen | Description |
 |--------|-------------|
