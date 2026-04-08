@@ -616,7 +616,7 @@ Contributions are welcome! Please follow these steps:
 This project is licensed under the **Apache License 2.0** — see the [LICENSE](LICENSE) file for details.
 
 ```
-Copyright 2026 THillainirmal
+Copyright 2026 Thillai Nirmal K
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -629,7 +629,7 @@ You may obtain a copy of the License at
 
 <div align="center">
 
-**Built with ❤️ by [THillainirmal](https://github.com/thillainirmal-tech)**
+**Built with ❤️ by [Thillai Nirmal K](https://github.com/thillainirmal-tech)**
 
 *If this project helped you, please consider giving it a ⭐*
 
