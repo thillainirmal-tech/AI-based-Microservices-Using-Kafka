@@ -464,6 +464,22 @@ Frontend runs at **http://localhost:3000** in development mode (direct to API Ga
 
  <img width="1920" height="1080" alt="demo-16" src="https://github.com/user-attachments/assets/69a4a152-d94f-4019-af3e-9cfc1cfbafea" />
  <img width="1920" height="1080" alt="demo-15" src="https://github.com/user-attachments/assets/a121fdd1-06a6-4a6b-8769-b19bda951dc8" />
+ <img width="1920" height="1080" alt="demo-01" src="https://github.com/user-attachments/assets/aa2a1a0d-9b11-41eb-b4c9-61e64ba835c4" />
+ <img width="1920" height="1080" alt="demo-02" src="https://github.com/user-attachments/assets/1d8bfe61-1bf1-4bb2-93a6-d9e8c59440e8" />
+ <img width="1920" height="1080" alt="demo-03" src="https://github.com/user-attachments/assets/cc53aa0d-9267-426a-b88d-ae9d01254aaf" />
+<img width="1920" height="1080" alt="demo-04" src="https://github.com/user-attachments/assets/b609b69b-cf41-41a4-8a6c-0cd7b24d4733" />
+<img width="1920" height="1080" alt="demo-05" src="https://github.com/user-attachments/assets/72791076-a72e-48ff-8cf5-dc57c0730893" />
+<img width="1920" height="1080" alt="demo-06" src="https://github.com/user-attachments/assets/ec1f45f1-d356-4ee1-85a3-17e572a443e1" />
+<img width="1920" height="1080" alt="demo-07" src="https://github.com/user-attachments/assets/5eb24c33-b4af-495e-b156-e45e9c9ce19c" />
+<img width="1920" height="1080" alt="demo-08" src="https://github.com/user-attachments/assets/07027439-aa7f-4c3b-8a5e-984f8f7106ff" />
+<img width="1920" height="1080" alt="demo-14" src="https://github.com/user-attachments/assets/e0a2cea7-7da5-4f55-9d9c-518a866ab401" />
+<img width="1920" height="1080" alt="demo-17" src="https://github.com/user-attachments/assets/d105f0f8-25c3-4e9c-84cf-34b3b80ce239" />
+<img width="1920" height="1080" alt="demo-18" src="https://github.com/user-attachments/assets/1d98cba7-ff6f-435a-a232-f02ef0c5e65e" />
+<img width="1920" height="1080" alt="demo-28" src="https://github.com/user-attachments/assets/87f65f9e-1842-4ecf-a9cf-7d91fbfcbcea" />
+<img width="1920" height="1080" alt="demo-30" src="https://github.com/user-attachments/assets/98800809-c708-4f85-920a-f88ab0414b8b" />
+<img width="1920" height="1080" alt="demo-32" src="https://github.com/user-attachments/assets/927b81ca-38fd-4c85-95ec-878cd8b8e7d7" />
+<img width="1920" height="1080" alt="demo-35" src="https://github.com/user-attachments/assets/b0d8d838-667b-43ba-bf87-7a931bbca6b3" />
+<img width="1920" height="1080" alt="demo-36" src="https://github.com/user-attachments/assets/8595eed7-e22c-45c5-afc0-c0a163eff2a7" />
  <img width="1920" height="1080" alt="demo-09" src="https://github.com/user-attachments/assets/0f97b9c1-bdee-49fd-ac85-23eb9d045d81" />
     <img width="1920" height="1080" alt="demo-19" src="https://github.com/user-attachments/assets/de7f9592-6dd6-411e-ab12-f16eee784843" />
   <img width="1920" height="1080" alt="demo-21" src="https://github.com/user-attachments/assets/79752bb6-536f-413b-b0be-1b97fba8a3b3" />
